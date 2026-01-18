@@ -11,9 +11,9 @@ mp_drawing = mp.solutions.drawing_utils
 hands = mp_hands.Hands(max_num_hands = 1, min_detection_confidence = 0.7, min_tracking_confidence = 0.6)
 
 # gesture time control
-pinch_start_time = None
 click_times_L = []
 click_times_R = []
+dragging_button = None
 click_cooldown = 0.5
 sensitivity = 2
 scroll_mode = False
@@ -47,6 +47,7 @@ while True:
         index_tip = handLm.landmark[8]
         index_connector = handLm.landmark[7]
         middle_tip = handLm.landmark[12]
+        ring_bottom = handLm.landmark[13]
         ring_tip = handLm.landmark[16]
         pinky_tip = handLm.landmark[20]
 
@@ -55,8 +56,8 @@ while True:
         # Move Cursor
         if not freeze_cursor:
             # Normalize around center
-            cx = (index_tip.x - 0.5) * sensitivity + 0.5
-            cy = (index_tip.y - 0.5) * sensitivity + 0.5
+            cx = (thumb_tip.x - 0.5) * sensitivity + 0.5
+            cy = (thumb_tip.y - 0.5) * sensitivity + 0.5
 
             # Convert to screen space
             screen_x = int(cx * screen_w)
@@ -68,15 +69,15 @@ while True:
 
             # Smooth movement: Interpolate
             if prev_screen_x is not None and prev_screen_y is not None:
-                screen_x = prev_screen_x + (screen_x - prev_screen_x) * 0.3
-                screen_y = prev_screen_y + (screen_y - prev_screen_y) * 0.3
+                screen_x = prev_screen_x + (screen_x - prev_screen_x) * 0.5
+                screen_y = prev_screen_y + (screen_y - prev_screen_y) * 0.5
 
             pyautogui.moveTo(screen_x, screen_y, duration=0.01)
             prev_screen_x, prev_screen_y = screen_x, screen_y
 
         # Left Clicks
-        distance_L = math.hypot(thumb_tip.x - index_connector.x, thumb_tip.y - index_connector.y)
-        if distance_L < 0.05:
+        distance_L = math.hypot(thumb_tip.x - index_tip.x, thumb_tip.y - index_tip.y)
+        if distance_L < 0.04:
             if not freeze_cursor:
                 freeze_cursor = True
                 click_times_L.append(time.time())
@@ -86,14 +87,22 @@ while True:
                     click_times_L = []
                 else:
                     pyautogui.click()
+        elif 0.06 > distance_L > 0.04:
+            if not is_dragging:
+                dragging_button = "left"
+                pyautogui.mouseDown()
+                is_dragging = True
         else:
+            if is_dragging and dragging_button == "left":
+                is_dragging = False
+                pyautogui.mouseUp()
             if freeze_cursor:
                 time.sleep(0.1)
             freeze_cursor = False
         
         #Right Clicks
         distance_R = math.hypot(thumb_tip.x - middle_tip.x, thumb_tip.y - middle_tip.y)
-        if distance_R < 0.05:
+        if distance_R < 0.04:
             if not freeze_cursor:
                 freeze_cursor = True
                 click_times_R.append(time.time())
@@ -103,13 +112,21 @@ while True:
                     click_times_R = []
                 else:
                     pyautogui.click(button="right")
+        elif 0.06 > distance_R > 0.04:
+            if not is_dragging:
+                pyautogui.mouseDown(button="right")
+                is_dragging = True
         else:
+            if is_dragging and dragging_button == "right":
+                is_dragging = False
+                pyautogui.mouseUp(button="right")
             if freeze_cursor:
-                time.sleep(0.1)
+                time.sleep(0.25)
             freeze_cursor = False
         
         # Scroll
-        if sum(fingers) == 4:
+        distance_S = math.hypot(thumb_tip.x - ring_bottom.x, thumb_tip.y - ring_bottom.y)
+        if sum(fingers) == 4 and distance_S <= 0.05:
             scroll_mode = True
         else:
             scroll_mode = False
@@ -126,6 +143,8 @@ while True:
     cv2.imshow("Live Video", frame)
 
     if cv2.waitKey(1) == ord("q"):
+        pyautogui.mouseUp()
+        pyautogui.mouseUp(button="right")
         break
 
 cap.release()
