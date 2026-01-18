@@ -1,0 +1,5 @@
+opencv_python
+mediapipe==0.10.13
+pyautogui
+pynput
+numpy
